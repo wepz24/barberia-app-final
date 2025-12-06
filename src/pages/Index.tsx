@@ -49,8 +49,11 @@ const Index = () => {
   const [loading, setLoading] = useState<boolean>(false);
   const [occupiedSlots, setOccupiedSlots] = useState<string[]>([]);
   
-  // Horarios disponibles
-  const timeSlots = ['12:00', '12:30', '13:00', '13:30', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30', '17:00', '17:30', '18:00', '18:30', '19:00', '19:30', '20:00', '20:30', '21:00'];
+  // CORREGIDO: Horario de 9:00 AM a 7:00 PM (horas en punto)
+  const timeSlots = [
+    '09:00', '10:00', '11:00', '12:00', '13:00', 
+    '14:00', '15:00', '16:00', '17:00', '18:00', '19:00'
+  ];
 
   useEffect(() => {
     fetchServices();
@@ -214,7 +217,7 @@ const Index = () => {
               {/* CAMBIO: Botón visible en móvil (quite el hidden md:flex) */}
               <Button 
                 variant="outline" 
-                onClick={() => navigate('/login')}
+                onClick={() => navigate('/admin')}
                 className="flex border-amber-500 text-amber-600 hover:bg-amber-50 px-3 md:px-4"
               >
                 <User className="mr-2 h-4 w-4" />
@@ -302,7 +305,7 @@ const Index = () => {
                      </div>
                      <div className="flex items-center space-x-3 text-gray-300">
                         <MapPin className="h-5 w-5 text-amber-500" />
-                        <span className="text-lg">Av. Siempre Viva 742</span>
+                        <span className="text-lg">Av. El Valle 6647, 7760599 Peñalolén, Región Metropolitana</span>
                      </div>
                   </CardContent>
                </Card>
