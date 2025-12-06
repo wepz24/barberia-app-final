@@ -10,8 +10,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { CalendarIcon, Clock, Scissors, Phone, MapPin, User } from 'lucide-react'; // Agregué MapPin para la dirección
-import { useNavigate } from 'react-router-dom'; // Para el botón de Soy Barbero
+import { CalendarIcon, Clock, Scissors, Phone, MapPin, User } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 interface Service {
   id: string;
@@ -35,7 +35,7 @@ interface Appointment {
 }
 
 const Index = () => {
-  const navigate = useNavigate(); // Hook para navegar
+  const navigate = useNavigate();
   const [services, setServices] = useState<Service[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date>();
   const [selectedService, setSelectedService] = useState<string>('');
@@ -49,12 +49,39 @@ const Index = () => {
   const [loading, setLoading] = useState<boolean>(false);
   const [occupiedSlots, setOccupiedSlots] = useState<string[]>([]);
   
-  const timeSlots = ['12:00', '12:30', '13:00', '13:30', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30', '17:00', '17:30', '18:00', '18:30', '19:00', '19:30', '20:00', '20:30', '21:00']; // Actualicé los slots a tu horario
+  // Horarios disponibles
+  const timeSlots = ['12:00', '12:30', '13:00', '13:30', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30', '17:00', '17:30', '18:00', '18:30', '19:00', '19:30', '20:00', '20:30', '21:00'];
 
   useEffect(() => {
     fetchServices();
     fetchAppointments();
-  }, []);
+
+    // --- REALTIME: Escuchar cambios en la base de datos ---
+    const channel = supabase
+      .channel('schema-db-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*', // Escuchar Insert, Update y Delete
+          schema: 'public',
+          table: 'appointments_2025_12_05_15_37'
+        },
+        (payload) => {
+          console.log('Cambio detectado en tiempo real:', payload);
+          fetchAppointments();
+          // Si hay una fecha seleccionada, actualizar también los slots ocupados
+          if (selectedDate) {
+             // Pequeño delay para asegurar que la base de datos procesó el cambio
+             setTimeout(() => fetchOccupiedSlots(selectedDate).then(setOccupiedSlots), 500);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [selectedDate]); // Se vuelve a ejecutar si cambia la fecha seleccionada para asegurar consistencia
 
   const fetchServices = async () => {
     const { data, error } = await supabase.from('services_2025_12_05_15_37').select('*').eq('active', true).order('price');
@@ -77,7 +104,7 @@ const Index = () => {
     }
   };
 
-  // Función para obtener horarios ocupados
+  // Función corregida para calcular bloques ocupados
   const fetchOccupiedSlots = async (date: Date) => {
     const dateStr = format(date, 'yyyy-MM-dd');
     const { data, error } = await supabase.from('appointments_2025_12_05_15_37').select('appointment_time, services_2025_12_05_15_37(duration_minutes)').eq('appointment_date', dateStr).in('status', ['pending', 'confirmed']);
@@ -88,24 +115,25 @@ const Index = () => {
 
     const occupied: string[] = [];
     data?.forEach(appointment => {
-      const startTime = appointment.appointment_time;
-      const duration = appointment.services_2025_12_05_15_37?.duration_minutes || 30;
-      occupied.push(startTime);
+      const startTime = appointment.appointment_time; // Ej: "14:00"
+      const duration = appointment.services_2025_12_05_15_37?.duration_minutes || 30; // Ej: 60 min
 
+      // Convertir hora inicio a minutos
       const [hours, minutes] = startTime.split(':').map(Number);
-      let currentMinutes = hours * 60 + minutes;
-      const endMinutes = currentMinutes + duration;
-      currentMinutes += 30;
-      
-      while (currentMinutes < endMinutes) {
-        const h = Math.floor(currentMinutes / 60);
-        const m = currentMinutes % 60;
-        const timeSlot = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
-        if (timeSlots.includes(timeSlot)) {
-          occupied.push(timeSlot);
-        }
-        currentMinutes += 30;
-      }
+      const startTotalMinutes = hours * 60 + minutes;
+      const endTotalMinutes = startTotalMinutes + duration; // Ej: 14:00 (840m) + 60m = 15:00 (900m)
+
+      // Recorrer nuestros slots y ver cuáles caen dentro de este rango ocupado
+      timeSlots.forEach(slot => {
+         const [h, m] = slot.split(':').map(Number);
+         const slotMinutes = h * 60 + m;
+
+         // Si el slot es igual al inicio o está entre medio del servicio, se bloquea
+         // Nota: < endTotalMinutes asegura que si termina a las 15:00, el slot de las 15:00 quede libre
+         if (slotMinutes >= startTotalMinutes && slotMinutes < endTotalMinutes) {
+            occupied.push(slot);
+         }
+      });
     });
     return [...new Set(occupied)];
   };
@@ -167,7 +195,7 @@ const Index = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-900 font-sans">
+    <div className="min-h-screen bg-slate-100 text-gray-900 font-sans"> {/* CAMBIO: Fondo Slate-100 para menos blancura */}
       {/* Header */}
       <div className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-50">
         <div className="container mx-auto px-4 py-4">
@@ -183,21 +211,22 @@ const Index = () => {
             </div>
             
             <div className="flex items-center gap-3">
-              {/* Botón Soy Barbero restaurado */}
+              {/* CAMBIO: Botón visible en móvil (quite el hidden md:flex) */}
               <Button 
                 variant="outline" 
                 onClick={() => navigate('/login')}
-                className="hidden md:flex border-amber-500 text-amber-600 hover:bg-amber-50"
+                className="flex border-amber-500 text-amber-600 hover:bg-amber-50 px-3 md:px-4"
               >
                 <User className="mr-2 h-4 w-4" />
-                Soy Barbero
+                <span className="hidden md:inline">Soy Barbero</span> {/* Texto oculto en movil muy pequeño, icono visible */}
+                <span className="md:hidden">Ingresar</span>
               </Button>
               
               <Button 
                 onClick={() => setShowBooking(!showBooking)} 
                 className="bg-amber-500 hover:bg-amber-600 text-white shadow-md transition-all hover:scale-105"
               >
-                {showBooking ? 'Ver Servicios' : 'Reservar Cita'}
+                {showBooking ? 'Ver Servicios' : 'Reservar'}
               </Button>
             </div>
           </div>
@@ -207,13 +236,13 @@ const Index = () => {
       <div className="container mx-auto px-4 py-8 md:py-12">
         {!showBooking ? (
           <div className="space-y-10 max-w-6xl mx-auto">
-             {/* Hero Section / Bienvenida */}
+             {/* Hero Section */}
              <div className="text-center space-y-4 mb-12">
                 <h2 className="text-4xl md:text-5xl font-extrabold text-gray-900 tracking-tight">
                   Tu estilo, <span className="text-amber-500">nuestra pasión</span>
                 </h2>
                 <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-                  Selecciona tu servicio, elige el horario que más te acomode y listo. Nosotros nos encargamos del resto.
+                  Selecciona tu servicio, elige el horario que más te acomode y listo.
                 </p>
              </div>
 
@@ -257,9 +286,8 @@ const Index = () => {
               </div>
             </div>
 
-            {/* Información de contacto y horarios */}
+            {/* Información de contacto */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-12">
-               {/* Tarjeta de Contacto */}
                <Card className="bg-gray-900 text-white border-none shadow-2xl overflow-hidden relative">
                   <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/20 rounded-full blur-3xl -mr-16 -mt-16"></div>
                   <CardHeader>
@@ -274,12 +302,11 @@ const Index = () => {
                      </div>
                      <div className="flex items-center space-x-3 text-gray-300">
                         <MapPin className="h-5 w-5 text-amber-500" />
-                        <span className="text-lg">Av. El Valle 6647, 7760599 Peñalolén, Región Metropolitana</span>
+                        <span className="text-lg">Av. Siempre Viva 742</span>
                      </div>
                   </CardContent>
                </Card>
 
-               {/* Tarjeta de Horarios */}
                <Card className="bg-white border-gray-200 shadow-lg">
                   <CardHeader>
                     <CardTitle className="text-2xl font-bold text-gray-900 flex items-center gap-2">
@@ -311,7 +338,6 @@ const Index = () => {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6 p-6 md:p-8">
-              {/* Selección de Servicio */}
               <div className="space-y-2">
                 <Label className="text-gray-700 font-medium">Servicio Seleccionado</Label>
                 <Select value={selectedService} onValueChange={setSelectedService}>
@@ -328,7 +354,7 @@ const Index = () => {
                 </Select>
               </div>
 
-              {/* Selección de Fecha */}
+              {/* CAMBIO: Arreglo de fecha para permitir seleccionar "Hoy" */}
               <div className="space-y-2">
                 <Label className="text-gray-700 font-medium">Fecha de la cita</Label>
                 <div className="flex justify-center border border-gray-200 rounded-xl p-4 bg-gray-50/50">
@@ -336,13 +362,18 @@ const Index = () => {
                      mode="single" 
                      selected={selectedDate} 
                      onSelect={setSelectedDate} 
-                     disabled={date => date < new Date()} 
+                     disabled={(date) => {
+                        // Crear una fecha para "hoy" a las 00:00:00
+                        const today = new Date();
+                        today.setHours(0, 0, 0, 0);
+                        // Deshabilitar solo si la fecha es ANTERIOR a hoy (ayer hacia atrás)
+                        return date < today;
+                     }}
                      className="rounded-md bg-white shadow-sm"
                    />
                 </div>
               </div>
 
-              {/* Selección de Hora */}
               {selectedDate && (
                 <div className="space-y-2 animate-in fade-in slide-in-from-top-4 duration-300">
                   <Label className="text-gray-700 font-medium">Horario disponible</Label>
@@ -354,19 +385,19 @@ const Index = () => {
                       {timeSlots.map(time => {
                         const isOccupied = occupiedSlots.includes(time);
                         return (
-                          <SelectItem key={time} value={time} disabled={isOccupied} className={isOccupied ? 'text-gray-300' : 'font-medium'}>
+                          <SelectItem key={time} value={time} disabled={isOccupied} className={isOccupied ? 'text-gray-300 line-through' : 'font-medium'}>
                             {time} {isOccupied ? '(Ocupado)' : ''}
                           </SelectItem>
                         );
                       })}
                     </SelectContent>
                   </Select>
+                  <p className="text-xs text-gray-500">* Los horarios ocupados se marcan automáticamente.</p>
                 </div>
               )}
 
               <div className="border-t border-gray-100 my-4"></div>
 
-              {/* Datos del Cliente */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label className="text-gray-700 font-medium">Nombre Completo</Label>
@@ -388,7 +419,6 @@ const Index = () => {
                 <Textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Ej: Me gustaría un degradado bajo..." className="bg-white border-gray-300" />
               </div>
 
-              {/* Resumen */}
               {selectedService && selectedDate && selectedTime && (
                 <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mt-4">
                     <h3 className="text-amber-800 font-bold mb-2 flex items-center"><Scissors className="w-4 h-4 mr-2"/> Resumen</h3>
