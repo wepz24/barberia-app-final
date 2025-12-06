@@ -10,7 +10,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { CalendarIcon, Clock, Scissors, Phone, Mail, User } from 'lucide-react';
+import { CalendarIcon, Clock, Scissors, Phone, MapPin, User } from 'lucide-react'; // Agregué MapPin para la dirección
+import { useNavigate } from 'react-router-dom'; // Para el botón de Soy Barbero
 
 interface Service {
   id: string;
@@ -34,6 +35,7 @@ interface Appointment {
 }
 
 const Index = () => {
+  const navigate = useNavigate(); // Hook para navegar
   const [services, setServices] = useState<Service[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date>();
   const [selectedService, setSelectedService] = useState<string>('');
@@ -47,7 +49,7 @@ const Index = () => {
   const [loading, setLoading] = useState<boolean>(false);
   const [occupiedSlots, setOccupiedSlots] = useState<string[]>([]);
   
-  const timeSlots = ['09:00', '09:30', '10:00', '10:30', '11:00', '11:30', '12:00', '12:30', '13:00', '13:30', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30', '17:00', '17:30', '18:00', '18:30'];
+  const timeSlots = ['12:00', '12:30', '13:00', '13:30', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30', '17:00', '17:30', '18:00', '18:30', '19:00', '19:30', '20:00', '20:30', '21:00']; // Actualicé los slots a tu horario
 
   useEffect(() => {
     fetchServices();
@@ -75,7 +77,7 @@ const Index = () => {
     }
   };
 
-  // Función para obtener horarios ocupados en una fecha específica
+  // Función para obtener horarios ocupados
   const fetchOccupiedSlots = async (date: Date) => {
     const dateStr = format(date, 'yyyy-MM-dd');
     const { data, error } = await supabase.from('appointments_2025_12_05_15_37').select('appointment_time, services_2025_12_05_15_37(duration_minutes)').eq('appointment_date', dateStr).in('status', ['pending', 'confirmed']);
@@ -84,22 +86,17 @@ const Index = () => {
       return [];
     }
 
-    // Calcular todos los slots ocupados considerando la duración del servicio
     const occupied: string[] = [];
     data?.forEach(appointment => {
       const startTime = appointment.appointment_time;
       const duration = appointment.services_2025_12_05_15_37?.duration_minutes || 30;
-
-      // Agregar el slot inicial
       occupied.push(startTime);
 
-      // Agregar slots adicionales según la duración
       const [hours, minutes] = startTime.split(':').map(Number);
       let currentMinutes = hours * 60 + minutes;
       const endMinutes = currentMinutes + duration;
-
-      // Marcar todos los slots de 30 minutos que están ocupados
       currentMinutes += 30;
+      
       while (currentMinutes < endMinutes) {
         const h = Math.floor(currentMinutes / 60);
         const m = currentMinutes % 60;
@@ -113,7 +110,6 @@ const Index = () => {
     return [...new Set(occupied)];
   };
 
-  // Actualizar horarios ocupados cuando cambia la fecha
   useEffect(() => {
     if (selectedDate) {
       fetchOccupiedSlots(selectedDate).then(setOccupiedSlots);
@@ -126,19 +122,16 @@ const Index = () => {
       return;
     }
 
-    // Verificar si el horario está ocupado
     if (occupiedSlots.includes(selectedTime)) {
-      toast.error('Este horario ya está ocupado. Por favor selecciona otro.');
+      toast.error('Este horario ya está ocupado.');
       return;
     }
     setLoading(true);
 
-    // Verificar nuevamente en la base de datos por seguridad
     const { data: existingAppointment } = await supabase.from('appointments_2025_12_05_15_37').select('id').eq('appointment_date', format(selectedDate, 'yyyy-MM-dd')).eq('appointment_time', selectedTime).in('status', ['pending', 'confirmed']).single();
     if (existingAppointment) {
       setLoading(false);
-      toast.error('Este horario ya fue reservado por otro cliente. Por favor selecciona otro.');
-      // Actualizar horarios ocupados
+      toast.error('Este horario ya fue reservado.');
       fetchOccupiedSlots(selectedDate).then(setOccupiedSlots);
       return;
     }
@@ -157,7 +150,6 @@ const Index = () => {
       toast.error('Error al reservar la cita');
     } else {
       toast.success('¡Cita reservada exitosamente!');
-      // Reset form
       setSelectedDate(undefined);
       setSelectedTime('');
       setSelectedService('');
@@ -175,143 +167,194 @@ const Index = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50"> {/* CAMBIO: Fondo claro en lugar de azul oscuro */}
+    <div className="min-h-screen bg-gray-50 text-gray-900 font-sans">
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 shadow-sm">
-        <div className="container mx-auto px-4 py-6">
+      <div className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-50">
+        <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <Scissors className="h-8 w-8 text-amber-500" />
+            <div className="flex items-center space-x-3 cursor-pointer" onClick={() => setShowBooking(false)}>
+              <div className="bg-amber-100 p-2 rounded-lg">
+                <Scissors className="h-6 w-6 text-amber-600" />
+              </div>
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">Barbería New Orland</h1> {/* CAMBIO: Texto oscuro */}
-                <p className="text-gray-500">Reserva tu cita online</p>
+                <h1 className="text-xl md:text-2xl font-bold text-gray-900 tracking-tight">Barbería New Orland</h1>
+                <p className="text-sm text-gray-500 font-medium">Reserva tu Estilo</p>
               </div>
             </div>
-            <Button onClick={() => setShowBooking(!showBooking)} className="bg-amber-500 hover:bg-amber-600 text-white font-semibold">
-              {showBooking ? 'Ver Citas' : 'Reservar Cita'}
-            </Button>
+            
+            <div className="flex items-center gap-3">
+              {/* Botón Soy Barbero restaurado */}
+              <Button 
+                variant="outline" 
+                onClick={() => navigate('/login')}
+                className="hidden md:flex border-amber-500 text-amber-600 hover:bg-amber-50"
+              >
+                <User className="mr-2 h-4 w-4" />
+                Soy Barbero
+              </Button>
+              
+              <Button 
+                onClick={() => setShowBooking(!showBooking)} 
+                className="bg-amber-500 hover:bg-amber-600 text-white shadow-md transition-all hover:scale-105"
+              >
+                {showBooking ? 'Ver Servicios' : 'Reservar Cita'}
+              </Button>
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="container mx-auto px-4 py-8">
+      <div className="container mx-auto px-4 py-8 md:py-12">
         {!showBooking ? (
-          <div className="space-y-8">
+          <div className="space-y-10 max-w-6xl mx-auto">
+             {/* Hero Section / Bienvenida */}
+             <div className="text-center space-y-4 mb-12">
+                <h2 className="text-4xl md:text-5xl font-extrabold text-gray-900 tracking-tight">
+                  Tu estilo, <span className="text-amber-500">nuestra pasión</span>
+                </h2>
+                <p className="text-lg text-gray-600 max-w-2xl mx-auto">
+                  Selecciona tu servicio, elige el horario que más te acomode y listo. Nosotros nos encargamos del resto.
+                </p>
+             </div>
+
             {/* Services Section */}
-            <Card className="bg-white border-gray-200 shadow-md"> {/* CAMBIO: Tarjeta blanca */}
-              <CardHeader>
-                <CardTitle className="text-gray-900 flex items-center space-x-2">
-                  <Scissors className="h-5 w-5" />
-                  <span>Nuestros Servicios</span>
-                </CardTitle>
-                <CardDescription className="text-gray-500">
-                  Servicios profesionales de barbería
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {services.map(service => (
-                    <Card key={service.id} className="bg-white border border-gray-200 hover:shadow-lg transition-shadow">
-                      <CardContent className="p-4">
-                        <h3 className="font-semibold text-gray-900 mb-2">{service.name}</h3>
-                        <p className="text-gray-600 text-sm mb-3">{service.description}</p>
-                        <div className="flex justify-between items-center">
-                          <span className="text-amber-600 font-bold">${service.price.toLocaleString()} CLP</span>
-                          <span className="text-gray-500 text-sm flex items-center">
-                            <Clock className="h-4 w-4 mr-1" />
-                            {service.duration_minutes} min
-                          </span>
+            <div>
+              <div className="flex items-center space-x-2 mb-6">
+                 <Scissors className="h-6 w-6 text-amber-500" />
+                 <h3 className="text-2xl font-bold text-gray-900">Nuestros Servicios</h3>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {services.map(service => (
+                  <Card key={service.id} className="group hover:shadow-xl transition-all duration-300 border-gray-100 bg-white overflow-hidden">
+                    <CardHeader className="pb-3 bg-gray-50/50 border-b border-gray-100">
+                      <CardTitle className="text-lg font-bold text-gray-800">{service.name}</CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-5 space-y-4">
+                      <p className="text-gray-600 text-sm leading-relaxed min-h-[40px]">{service.description}</p>
+                      <div className="flex justify-between items-end pt-2">
+                        <div>
+                           <p className="text-xs text-gray-400 font-medium uppercase tracking-wider">Precio</p>
+                           <span className="text-xl font-bold text-amber-600">${service.price.toLocaleString()} CLP</span>
                         </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+                        <div className="flex items-center text-gray-400 bg-gray-100 px-3 py-1 rounded-full text-xs font-medium">
+                          <Clock className="h-3 w-3 mr-1" />
+                          {service.duration_minutes} min
+                        </div>
+                      </div>
+                      <Button 
+                        onClick={() => {
+                          setSelectedService(service.id);
+                          setShowBooking(true);
+                        }}
+                        className="w-full mt-4 bg-gray-900 text-white hover:bg-gray-800"
+                      >
+                        Seleccionar
+                      </Button>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </div>
 
             {/* Información de contacto y horarios */}
-            <Card className="bg-white border-gray-200 shadow-md">
-              <CardHeader>
-                <CardTitle className="text-gray-900">Información de Contacto</CardTitle>
-                <CardDescription className="text-gray-500">
-                  Horarios de atención y contacto
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <h3 className="text-gray-900 font-semibold mb-3">Horarios de Atención</h3>
-                    <div className="space-y-2 text-gray-600">
-                      <p>Lunes a Viernes: 9:00 AM - 7:00 PM</p>
-                    </div>
-                  </div>
-                  <div>
-                    <h3 className="text-gray-900 font-semibold mb-3">Contacto</h3>
-                    <div className="space-y-2 text-gray-600">
-                      <p className="flex items-center space-x-2">
-                        <Phone className="h-4 w-4" />
-                        <span>+56 9 1234 5678</span>
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-12">
+               {/* Tarjeta de Contacto */}
+               <Card className="bg-gray-900 text-white border-none shadow-2xl overflow-hidden relative">
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/20 rounded-full blur-3xl -mr-16 -mt-16"></div>
+                  <CardHeader>
+                    <CardTitle className="text-2xl font-bold flex items-center gap-2">
+                      <Phone className="h-6 w-6 text-amber-400" /> Contáctanos
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                     <div className="flex items-center space-x-3 text-gray-300">
+                        <Phone className="h-5 w-5 text-amber-500" />
+                        <span className="text-lg">+56 9 8911 9792</span>
+                     </div>
+                     <div className="flex items-center space-x-3 text-gray-300">
+                        <MapPin className="h-5 w-5 text-amber-500" />
+                        <span className="text-lg">Av. El Valle 6647, 7760599 Peñalolén, Región Metropolitana</span>
+                     </div>
+                  </CardContent>
+               </Card>
+
+               {/* Tarjeta de Horarios */}
+               <Card className="bg-white border-gray-200 shadow-lg">
+                  <CardHeader>
+                    <CardTitle className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                      <Clock className="h-6 w-6 text-amber-500" /> Horarios
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                     <div className="space-y-2">
+                        <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                           <span className="font-medium text-gray-700">Lunes a Domingo</span>
+                           <span className="text-amber-600 font-bold">12:00 PM - 21:00 PM</span>
+                        </div>
+                     </div>
+                  </CardContent>
+               </Card>
+            </div>
+
           </div>
         ) : (
-          /* Booking Form */
-          <Card className="max-w-2xl mx-auto bg-white border-gray-200 shadow-xl">
-            <CardHeader>
-              <CardTitle className="text-gray-900">Reservar Nueva Cita</CardTitle>
+          /* Formulario de Reserva */
+          <Card className="max-w-2xl mx-auto bg-white border-gray-200 shadow-2xl">
+            <CardHeader className="bg-gray-50 border-b border-gray-100">
+              <Button variant="ghost" className="w-fit pl-0 hover:bg-transparent text-gray-500 mb-2" onClick={() => setShowBooking(false)}>
+                ← Volver a servicios
+              </Button>
+              <CardTitle className="text-2xl font-bold text-gray-900">Finaliza tu Reserva</CardTitle>
               <CardDescription className="text-gray-500">
-                Completa el formulario para reservar tu cita
+                Estás a un paso de tu nuevo estilo.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
-              {/* Service Selection */}
+            <CardContent className="space-y-6 p-6 md:p-8">
+              {/* Selección de Servicio */}
               <div className="space-y-2">
-                <Label className="text-gray-700">Servicio *</Label>
+                <Label className="text-gray-700 font-medium">Servicio Seleccionado</Label>
                 <Select value={selectedService} onValueChange={setSelectedService}>
-                  <SelectTrigger className="bg-white border-gray-300 text-gray-900">
+                  <SelectTrigger className="bg-white border-gray-300 focus:ring-amber-500">
                     <SelectValue placeholder="Selecciona un servicio" />
                   </SelectTrigger>
                   <SelectContent>
                     {services.map(service => (
                       <SelectItem key={service.id} value={service.id}>
-                        {service.name} - ${service.price.toLocaleString()} CLP ({service.duration_minutes} min)
+                        {service.name} - ${service.price.toLocaleString()} CLP
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
 
-              {/* Date Selection */}
+              {/* Selección de Fecha */}
               <div className="space-y-2">
-                <Label className="text-gray-700">Fecha *</Label>
-                <div className="flex justify-center border rounded-md p-2">
+                <Label className="text-gray-700 font-medium">Fecha de la cita</Label>
+                <div className="flex justify-center border border-gray-200 rounded-xl p-4 bg-gray-50/50">
                    <Calendar 
                      mode="single" 
                      selected={selectedDate} 
                      onSelect={setSelectedDate} 
-                     disabled={date => date < new Date() || date.getDay() === 0} 
-                     className="rounded-md border-gray-200" 
-                    />
+                     disabled={date => date < new Date()} 
+                     className="rounded-md bg-white shadow-sm"
+                   />
                 </div>
               </div>
 
-              {/* Time Selection */}
+              {/* Selección de Hora */}
               {selectedDate && (
-                <div className="space-y-2">
-                  <Label className="text-gray-700">Hora *</Label>
+                <div className="space-y-2 animate-in fade-in slide-in-from-top-4 duration-300">
+                  <Label className="text-gray-700 font-medium">Horario disponible</Label>
                   <Select value={selectedTime} onValueChange={setSelectedTime}>
-                    <SelectTrigger className="bg-white border-gray-300 text-gray-900">
-                      <SelectValue placeholder="Selecciona una hora" />
+                    <SelectTrigger className="bg-white border-gray-300">
+                      <SelectValue placeholder="--:--" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="max-h-60">
                       {timeSlots.map(time => {
                         const isOccupied = occupiedSlots.includes(time);
                         return (
-                          <SelectItem key={time} value={time} disabled={isOccupied} className={isOccupied ? 'opacity-50 cursor-not-allowed' : ''}>
+                          <SelectItem key={time} value={time} disabled={isOccupied} className={isOccupied ? 'text-gray-300' : 'font-medium'}>
                             {time} {isOccupied ? '(Ocupado)' : ''}
                           </SelectItem>
                         );
@@ -321,46 +364,45 @@ const Index = () => {
                 </div>
               )}
 
-              {/* Client Information */}
+              <div className="border-t border-gray-100 my-4"></div>
+
+              {/* Datos del Cliente */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label className="text-gray-700">Nombre Completo *</Label>
-                  <Input value={clientName} onChange={e => setClientName(e.target.value)} placeholder="Tu nombre completo" className="bg-white border-gray-300 text-gray-900 placeholder:text-gray-400" />
+                  <Label className="text-gray-700 font-medium">Nombre Completo</Label>
+                  <Input value={clientName} onChange={e => setClientName(e.target.value)} placeholder="Juan Pérez" className="bg-white border-gray-300" />
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-gray-700">Teléfono *</Label>
-                  <Input value={clientPhone} onChange={e => setClientPhone(e.target.value)} placeholder="Tu número de teléfono" className="bg-white border-gray-300 text-gray-900 placeholder:text-gray-400" />
+                  <Label className="text-gray-700 font-medium">Teléfono</Label>
+                  <Input value={clientPhone} onChange={e => setClientPhone(e.target.value)} placeholder="+56 9..." className="bg-white border-gray-300" />
                 </div>
               </div>
 
               <div className="space-y-2">
-                <Label className="text-gray-700">Email (opcional)</Label>
-                <Input type="email" value={clientEmail} onChange={e => setClientEmail(e.target.value)} placeholder="tu@email.com" className="bg-white border-gray-300 text-gray-900 placeholder:text-gray-400" />
+                <Label className="text-gray-700 font-medium">Email (Opcional)</Label>
+                <Input type="email" value={clientEmail} onChange={e => setClientEmail(e.target.value)} placeholder="cliente@correo.com" className="bg-white border-gray-300" />
               </div>
 
               <div className="space-y-2">
-                <Label className="text-gray-700">Notas adicionales</Label>
-                <Textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Alguna preferencia o comentario especial..." className="bg-white border-gray-300 text-gray-900 placeholder:text-gray-400" />
+                <Label className="text-gray-700 font-medium">Notas (Opcional)</Label>
+                <Textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Ej: Me gustaría un degradado bajo..." className="bg-white border-gray-300" />
               </div>
 
-              {/* Summary */}
+              {/* Resumen */}
               {selectedService && selectedDate && selectedTime && (
-                <Card className="bg-amber-50 border-amber-200">
-                  <CardContent className="p-4">
-                    <h3 className="text-amber-600 font-semibold mb-2">Resumen de tu cita</h3>
-                    <div className="space-y-1 text-sm">
-                      <p className="text-gray-700"><strong>Servicio:</strong> {getSelectedServiceDetails()?.name}</p>
-                      <p className="text-gray-700"><strong>Fecha:</strong> {format(selectedDate, 'dd/MM/yyyy', { locale: es })}</p>
-                      <p className="text-gray-700"><strong>Hora:</strong> {selectedTime}</p>
-                      <p className="text-gray-700"><strong>Duración:</strong> {getSelectedServiceDetails()?.duration_minutes} minutos</p>
-                      <p className="text-amber-600 font-semibold"><strong>Precio:</strong> ${getSelectedServiceDetails()?.price.toLocaleString()} CLP</p>
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mt-4">
+                    <h3 className="text-amber-800 font-bold mb-2 flex items-center"><Scissors className="w-4 h-4 mr-2"/> Resumen</h3>
+                    <div className="grid grid-cols-2 gap-2 text-sm text-gray-700">
+                      <span>Servicio:</span> <span className="font-semibold">{getSelectedServiceDetails()?.name}</span>
+                      <span>Fecha:</span> <span className="font-semibold">{format(selectedDate, 'dd/MM/yyyy', { locale: es })}</span>
+                      <span>Hora:</span> <span className="font-semibold">{selectedTime} hrs</span>
+                      <span>Total:</span> <span className="font-bold text-amber-600">${getSelectedServiceDetails()?.price.toLocaleString()} CLP</span>
                     </div>
-                  </CardContent>
-                </Card>
+                </div>
               )}
 
-              <Button onClick={handleBookAppointment} disabled={loading || !selectedDate || !selectedTime || !selectedService || !clientName || !clientPhone} className="w-full bg-amber-500 hover:bg-amber-600 text-white font-semibold">
-                {loading ? 'Reservando...' : 'Confirmar Reserva'}
+              <Button onClick={handleBookAppointment} disabled={loading || !selectedDate || !selectedTime || !selectedService || !clientName || !clientPhone} className="w-full h-12 text-lg bg-amber-500 hover:bg-amber-600 text-white font-bold shadow-lg mt-4">
+                {loading ? 'Confirmando...' : 'Confirmar Reserva'}
               </Button>
             </CardContent>
           </Card>
